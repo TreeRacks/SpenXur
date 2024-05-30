@@ -443,8 +443,9 @@ def is_within_time_range():
         return False
 
 @bot.command()
+@commands.cooldown(1, 10, commands.BucketType.user)
 async def whereisxur(ctx):
-    @commands.cooldown(1, 10, commands.BucketType.user)
+
     # Create a WebScraper instance
     scraper = WebScraper("https://whereisxur.com/")
     embed = discord.Embed(title="__**A Public Xûrvice Announcement**__", color=0x964B00)
@@ -517,8 +518,8 @@ async def whereisxur(ctx):
         #     thumbnail_file = discord.File(thumbnail_path, filename="xurWantedT.png")
         #     embed.set_thumbnail(url="attachment://xurWantedT.png")
             
-        else:
-            await ctx.send("Thumbnail image file not found.")
+        # else:
+        #     await ctx.send("Thumbnail image file not found.")
 
     await ctx.send(embed=embed)
         
