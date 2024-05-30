@@ -49,6 +49,7 @@ class WebScraper:
             
             # run browser in headless mode 
             options.headless = True 
+            options.add_argument("--headless=new")
             
             # instantiate driver 
             driver = webdriver.Chrome(service=ChromeService( 
@@ -89,7 +90,7 @@ class WebScraper:
             
             # run browser in headless mode 
             options.headless = True 
-            
+            options.add_argument("--headless=new")
             # instantiate driver 
             driver = webdriver.Chrome(service=ChromeService( 
                 ChromeDriverManager().install()), options=options) 
@@ -127,7 +128,7 @@ class WebScraper:
             
             # run browser in headless mode 
             options.headless = True 
-            
+            options.add_argument("--headless=new")
             # instantiate driver 
             driver = webdriver.Chrome(service=ChromeService( 
                 ChromeDriverManager().install()), options=options) 
