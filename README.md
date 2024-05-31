@@ -26,6 +26,10 @@ For --repeat_echo:\
 
 **Note: `channelid` is equivalent to a Discord channel mention.
 
+__An Example:__
+![image](https://github.com/TreeRacks/SpenXur/assets/47769935/ea94939b-1338-4c9b-bbc2-6ff06506cc82)
+
+
 ---
 
 ### ```--show```
