@@ -38,7 +38,7 @@ Shows information about all the messages that the user has scheduled, such as it
 ---
 
 ### ```--delete```
-Deletes a message by its id.
+Deletes a message by its id. Users can only delete messages they themselves have scheduled (ie. messages that are visible when ```--show``` is called).
 
 ---
 
