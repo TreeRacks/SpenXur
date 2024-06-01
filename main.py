@@ -120,6 +120,8 @@ intents.guilds = True
 bot = commands.Bot(command_prefix='--', intents=intents)
 COOLDOWN_RATE_LIMIT = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
 load_dotenv()
+
+
 async def setup_database():
     async with aiosqlite.connect('messages.db') as db:
         await db.execute('''CREATE TABLE IF NOT EXISTS scheduled_messages
@@ -152,7 +154,7 @@ async def idle_mode():
 
 @bot.command()
 async def shutdown(ctx):
-    if ctx.author.id == os.getenv('ADMIN_ID'):
+    if ctx.author.id == int(os.getenv('ADMIN_ID')):
         await ctx.send("Shutting down...")
         await bot.close()
     else:
@@ -349,7 +351,7 @@ async def show(ctx):
 #admin command: show all messages
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def showall(ctx):
-    if ctx.author.id == os.getenv('ADMIN_ID'):
+    if ctx.author.id == int(os.getenv('ADMIN_ID')):
         async with aiosqlite.connect('messages.db') as db:
             async with db.execute("SELECT * FROM scheduled_messages") as cursor:
                 messages = await cursor.fetchall()
@@ -405,7 +407,7 @@ async def delete(ctx, message_id: int):
 @bot.command()
 #admin command: clear all messages
 async def clear(ctx):
-    if ctx.author.id == os.getenv('ADMIN_ID'):    
+    if ctx.author.id == int(os.getenv('ADMIN_ID')):    
         async with aiosqlite.connect('messages.db') as db:
             await db.execute("DELETE FROM scheduled_messages")
             await db.commit()
@@ -546,8 +548,8 @@ async def whatisxur(ctx):
         if os.path.isfile(r".\vendors.json") == False:    
             with open('./vendors.json', 'w') as file:
                 file.write(json.dumps(json.loads(res.text), indent = 4))
-            with open('vendors.json', 'r') as file:
-                data = json.load(file)
+        with open('vendors.json', 'r') as file:
+            data = json.load(file)
             
         item_hashes = []
 
