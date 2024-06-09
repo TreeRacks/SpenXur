@@ -114,17 +114,18 @@ def build_dict(hash_dict):
 
     print('Dictionary Generated!')
 
-    if os.path.isfile(r".\manifest.content") == False:
-            get_manifest()
-            all_data = build_dict(hashes)
-            with open('manifest.pickle', 'wb') as data:
-                pickle.dump(all_data, data)
-                print("'manifest.pickle' created!\nDONE!")
-    else:
-        print('Pickle Exists')
 
-    with open('manifest.pickle', 'rb') as data:
-        all_data = pickle.load(data)
+    # get_manifest()
+    # all_data = build_dict(hashes)
+    # if os.path.isfile(r".\manifest.content") == False:
+    #     with open('manifest.pickle', 'wb') as data:
+    #         pickle.dump(all_data, data)
+    #         print("'manifest.pickle' created!\nDONE!")
+    # else:
+    #     print('Pickle Exists')
+
+    # with open('manifest.pickle', 'rb') as data:
+    #     all_data = pickle.load(data)
     #check if pickle exists, if not create one.
     # hash = 1363886209
     # ghorn = all_data['DestinyInventoryItemDefinition'][hash]

@@ -563,7 +563,7 @@ async def whatisxur(ctx):
 
         
 
-        if os.path.isfile(r".\manifest.content") == False:
+        if os.path.isfile(r".\manifest.pickle") == False:
             get_manifest()
             all_data = build_dict(hashes)
             with open('manifest.pickle', 'wb') as data:
