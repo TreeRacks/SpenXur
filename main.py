@@ -7,13 +7,15 @@ import os
 import pytz
 import requests, zipfile, pickle
 import json
+import math
 from selenium import webdriver 
 from selenium.webdriver.common.by import By 
 from selenium.webdriver.chrome.service import Service as ChromeService 
 from webdriver_manager.chrome import ChromeDriverManager 
 from scraper import WebScraper
 from handleManifest import get_manifest, build_dict, hashes
-from quotes import quotes
+from quotes import quotes, bansheequotes
+from uselessPlugs import uselessPlugs
 from discord.ext import commands
 from discord.ext.commands.errors import ChannelNotFound
 from dotenv import load_dotenv
@@ -131,7 +133,6 @@ async def setup_database():
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has arrived')
-    
     await idle_mode()
 
 async def idle_mode():
@@ -183,6 +184,13 @@ def get_channel_if_exists(ctx, channel_name): # helper function to get the chann
     else:
         return ctx.channel
     return channel
+
+@bot.command()
+@commands.cooldown(1, 10, commands.BucketType.user)
+async def quote(ctx):
+    quote = random.choice(quotes)
+    await ctx.send(f'"{quote}"')
+
 
 @bot.command()
 @commands.cooldown(1, 10, commands.BucketType.user)
@@ -253,7 +261,7 @@ async def echodelay(ctx, delay: int, channel: discord.TextChannel, *, message):
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def repeat_echo(ctx, duration: int, interval: int, channel: discord.TextChannel, *, message):
     try:
-        # Ensure duration and interval are positive
+        
         if duration <= 0 or interval <= 0:
             await ctx.send("Duration and interval must be positive integers.")
             return
@@ -262,7 +270,7 @@ async def repeat_echo(ctx, duration: int, interval: int, channel: discord.TextCh
             await ctx.send("No channel specified, defaulting to current channel...")
             channel = ctx.channel
 
-        # Check if the channel exists in the server
+        
         if ctx.guild.get_channel(channel.id) is None:
             await ctx.send("This channel does not exist in this server. Only channels in this server can be mentioned.")
             return
@@ -334,18 +342,34 @@ async def show(ctx):
             if len(messages) == 0:
                 await ctx.send("No scheduled messages.")
                 return
-            embed = discord.Embed(title=f"__**{ctx.author.display_name} has requested I relay these messages...**__", color=0x964B00)
 
-            message_str = "Scheduled messages:\n"
+            embeds = []
+            embed = discord.Embed(title=f"__**{ctx.author.display_name} has requested I relay these messages...**__", color=0x964B00)
+            message_str = ""
+            field_limit = 1024
+
             for message in messages:
                 message_id, time_str, message_text, channel_id, user_id = message
                 
                 channel = bot.get_channel(channel_id)
                 user_name = bot.get_user(user_id).display_name if bot.get_user(user_id) else "Unknown User"
                 channel_name = channel.name if channel else "Unknown Channel"
-                message_str += f'``Message id: {message_id}`` \n ``{time_str} PDT`` - "{message_text}" \n To channel: <#{channel_id}> from {user_name}\n'
-            embed.add_field(name="", value=message_str, inline=False)
-            await ctx.send(embed=embed)    
+                new_message = f'``Message id: {message_id}`` \n ``{time_str} PDT`` - "{message_text}" \n To channel: <#{channel_id}> from {user_name}\n'
+                
+                if len(message_str) + len(new_message) > field_limit:
+                    embed.add_field(name="", value=message_str, inline=False)
+                    embeds.append(embed)
+                    embed = discord.Embed(title="", color=0x964B00)
+                    message_str = ""
+
+                message_str += new_message
+            
+            if message_str:
+                embed.add_field(name="", value=message_str, inline=False)
+                embeds.append(embed)
+            
+            for embed in embeds:
+                await ctx.send(embed=embed)
 
 @bot.command()
 #admin command: show all messages
@@ -356,22 +380,33 @@ async def showall(ctx):
             async with db.execute("SELECT * FROM scheduled_messages") as cursor:
                 messages = await cursor.fetchall()
 
-            if len(messages) == 0:
-                await ctx.send("No scheduled messages.")
-                return
-            embed = discord.Embed(title="__**Retrieving all scheduled messages...**__", color=0x964B00)
+            embeds = []
+            embed = discord.Embed(title=f"__**Retrieving all messages...**__", color=0x964B00)
+            message_str = ""
+            embed_field_limit = 1024  # Character limit for embed field values
 
-            message_str = "Scheduled messages:\n"
             for message in messages:
                 message_id, time_str, message_text, channel_id, user_id = message
                 
                 channel = bot.get_channel(channel_id)
                 user_name = bot.get_user(user_id).display_name if bot.get_user(user_id) else "Unknown User"
                 channel_name = channel.name if channel else "Unknown Channel"
-                message_str += f'``Message id: {message_id}`` \n ``{time_str} PDT`` - "{message_text}" \n To channel: <#{channel_id}> from {user_name}\n'
+                new_message = f'``Message id: {message_id}`` \n ``{time_str} PDT`` - "{message_text}" \n To channel: <#{channel_id}> from {user_name}\n'
                 
-            embed.add_field(name="", value=message_str, inline=False)
-            await ctx.send(embed=embed)
+                if len(message_str) + len(new_message) > embed_field_limit:
+                    embed.add_field(name="", value=message_str, inline=False)
+                    embeds.append(embed)
+                    embed = discord.Embed(title="", color=0x964B00)
+                    message_str = ""
+
+                message_str += new_message
+            
+            if message_str:
+                embed.add_field(name="", value=message_str, inline=False)
+                embeds.append(embed)
+
+            for embed in embeds:
+                await ctx.send(embed=embed)
     else:
         await ctx.send("The Nine have not granted you permission to view all scheduled messages.")
 
@@ -428,13 +463,10 @@ async def time(ctx):
 
 # (Friday 9 am PST to Tuesday 9 am PST, Friday 4 PM UTC to Monday 4 PM UTC)
 def is_within_time_range():
-    # Get the current date and time in UTC
     current_time = datetime.datetime.utcnow()
-
     # Friday
     if current_time.weekday() == 4 and 16 <= current_time.hour <= 23:
         return True
-
     # Saturday, Sunday, and Monday
     elif current_time.weekday() in [5, 6, 0]: #and 0 <= current_time.hour < 16:
         return True
@@ -448,12 +480,10 @@ def is_within_time_range():
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def whereisxur(ctx):
 
-    # Create a WebScraper instance
     scraper = WebScraper("https://whereisxur.com/")
     embed = discord.Embed(title="__**A Public Xûrvice Announcement**__", color=0x964B00)
     if is_within_time_range():
         quote = random.choice(quotes)
-        # add some text to the embed
         embed.add_field(name = "", value=f'*"{quote}"*', inline=False)
         extracted_data = await scraper.fetch_data()
         current_time = datetime.datetime.utcnow()
@@ -510,44 +540,221 @@ async def whereisxur(ctx):
         days_str = "day" if days == 1 else "days"
         hours_str = "hour" if hours == 1 else "hours"
         minutes_str = "minute" if minutes == 1 else "minutes"
-
-        # Format the message with proper grammar
-        message = f"I have departed to restock on my wares. I shall return with more terrible things in... \n **{days} {days_str}, {hours} {hours_str} and {minutes} {minutes_str}.**"
+        message = f"I have departed to restock on my wares. I shall return with at least a couple good things in... \n **{days} {days_str}, {hours} {hours_str} and {minutes} {minutes_str}.**"
         embed.add_field(name="", value=message, inline=False)
-        # thumbnail_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xurWantedT.png")
-        # # Check if the thumbnail image file exists
-        # if os.path.exists(thumbnail_path):
-        #     thumbnail_file = discord.File(thumbnail_path, filename="xurWantedT.png")
-        #     embed.set_thumbnail(url="attachment://xurWantedT.png")
-            
-        # else:
-        #     await ctx.send("Thumbnail image file not found.")
+        
+        
 
     await ctx.send(embed=embed)
         
 client = Client(
-    bungie_client_id=os.getenv('CLIENT_ID'),
-    bungie_client_secret=os.getenv('CLIENT_SECRET'),
-    bungie_token=os.getenv('API_KEY'),
+    bungie_client_id=(os.getenv('CLIENT_ID')),
+    bungie_client_secret=(os.getenv('CLIENT_SECRET')),
+    bungie_token=(os.getenv('API_KEY')),
 )
-headers = {
-    'X-API-Key': os.getenv('API_KEY'),
-    'Authorization': '2305843009488814713'
+
+publicheaders = {
+    'X-API-Key': (os.getenv('API_KEY'))
 }
 
+headers = {
+    'X-API-Key': (os.getenv('API_KEY')),
+    'Authorization': f"Bearer {os.getenv('access_token')}"
+}
 
+refreshheaders = {
+    'X-API-Key': (os.getenv('API_KEY')),
+    'Authorization': f"Bearer {os.getenv('refresh_token')}"
+}
+
+tokenheaders = {
+    'Content-Type':'application/x-www-form-urlencoded',
+    
+}
+def flatten_json(json_data, parent_key='', sep='_'):
+    items = []
+    for k, v in json_data.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_json(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+
+
+
+@bot.command()
+async def whatisbanshee(ctx):
+    await ctx.send("Getting Banshee-44's inventory...")
+    post = requests.post('https://www.bungie.net/Platform/App/Oauth/Token/', headers = tokenheaders, data = f"grant_type=refresh_token&refresh_token={os.getenv('refresh_token')}&client_id={os.getenv('CLIENT_ID')}&client_secret={os.getenv('CLIENT_SECRET')}")
+    with open('./token.json', 'w') as file:
+        file.write(json.dumps(json.loads(post.text), indent = 4))
+    print(type(os.getenv('CLIENT_ID')))
+    if os.path.isfile(r".\token.json") == False: 
+        post = requests.post('https://www.bungie.net/Platform/App/Oauth/Token/', headers = tokenheaders, data = f"grant_type=authorization_code&code=4e286a86fa54e77fb28f8a4d7b2aa63c&client_id={os.getenv('CLIENT_ID')}&client_secret={os.getenv('CLIENT_SECRET')}")
+        with open('./token.json', 'w') as file:
+            file.write(json.dumps(json.loads(post.text), indent = 4))
+    json_file_path = './token.json'
+    env_file_path = './.env'
+    
+    
+    # every hour, the token will expire and we need to refresh it, bandaid solution is just constantly using the refresh token
+    
+    with open(json_file_path, 'r') as file:
+        json_data = json.load(file)
+
+    flattened_data = flatten_json(json_data)
+
+    env_data = {}
+    if os.path.isfile(env_file_path):
+        with open(env_file_path, 'r') as env_file:
+            for line in env_file:
+                if line.strip() and not line.startswith('#'):
+                    key, value = line.strip().split('=', 1)
+                    env_data[key] = value
+
+   
+    env_data.update(flattened_data)
+    with open(env_file_path, 'w') as env_file:
+        for key, value in env_data.items():
+            env_file.write(f"{key}={value}\n")
+    
+    
+    os.environ.update({key: str(value) for key, value in flattened_data.items()})
+    headers.update({'Authorization': f"Bearer {os.getenv('access_token')}"})
+    
+
+    print("Data written to .env file successfully.")
+
+    res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009488814713/Vendors/672118013/?components=305,402', headers = headers)
+    
+    await ctx.send(f"Request returned {res.status_code}")
+    
+
+    with open('./banshee.json', 'w') as file:
+        file.write(json.dumps(json.loads(res.text), indent = 4))
+    with open('./banshee.json', 'r') as file:
+        data = json.load(file)
+    item_hashes = []
+    item_sockets = []
+    item_plug_hashes = {}  # Dictionary to store itemHash and its plugHashes
+    sales_data = data.get('Response', {}).get('sales', {}).get('data', {})
+    sockets_data = data.get('Response', {}).get('itemComponents', {}).get('sockets', {}).get('data', {})
+
+    for sale_id, sale_info in sales_data.items():
+        if 'itemHash' in sale_info:
+            item_hashes.append(sale_info['itemHash'])
+        if sale_id in sockets_data:
+            socket_info = sockets_data[sale_id]
+            plug_hashes = [socket['plugHash'] for socket in socket_info["sockets"] if "plugHash" in socket]
+            item_plug_hashes[sale_info['itemHash']] = plug_hashes
+            
+        
+
+    if os.path.isfile(r".\manifest.pickle") == False:
+        get_manifest()
+        all_data = build_dict(hashes)
+        with open('manifest.pickle', 'wb') as data:
+            pickle.dump(all_data, data)
+            print("'manifest.pickle' created!\nDONE!")
+    else:
+        print('Pickle Exists')
+
+    with open('manifest.pickle', 'rb') as data:
+        all_data = pickle.load(data)
+    #check if pickle exists, if not create one.
+    
+    item_list = []
+    plug_list = []
+    for item_hash in item_hashes:
+        item = all_data['DestinyInventoryItemDefinition'][item_hash]
+        item_list.append(item)
+
+       
+        if item_hash in item_plug_hashes:
+            plug_hashes = item_plug_hashes[item_hash]
+            for plug_hash in plug_hashes:
+                if plug_hash in all_data['DestinyInventoryItemDefinition']:
+                    plug = all_data['DestinyInventoryItemDefinition'][plug_hash]
+                    if plug['displayProperties']['name'] not in uselessPlugs and plug['itemTypeDisplayName'] != "Origin Trait":
+                        plug_list.append(plug)
+                        
+        
+
+   
+    with (open('./itemList.json', 'w')) as file:
+        file.write(json.dumps(item_list, indent = 4))
+    with (open('./plugList.json', 'w')) as file:
+        file.write(json.dumps(plug_list, indent = 4))
+
+    PLUGS_PER_PAGE = 6
+
+    def create_embed(page):
+        quote = random.choice(bansheequotes)
+        embed = discord.Embed(title="__**Banshee-44's Wares**__", color=0x964B00)
+        start = page * PLUGS_PER_PAGE
+        end = start + PLUGS_PER_PAGE
+
+        if page == 0:
+            embed.add_field(name="", value=f'*"{quote}"*', inline=False)
+            for item in item_list:
+                
+                embed.add_field(
+                    name=f"__**{item['displayProperties']['name']}**__ --- {item['itemTypeDisplayName']}",
+                    value=f"*{item['flavorText']}*",
+                    inline=False
+                )
+
+        else:
+            item_index = (page - 1) // (math.ceil(len(plug_list) / PLUGS_PER_PAGE))
+            item_name = item_list[item_index + page + 2]['displayProperties']['name'] # skip some items since they are not in the vendorSales list
+            item_description = item_list[item_index + page + 2]['flavorText'] 
+            embed.title = f"__**Banshee-44's Wares**__ - {item_name}"
+            embed.add_field(name="", value=f'*"{item_description}"*', inline=False)
+            for plug in plug_list[start:end]:
+                embed.add_field(
+                    name=f"__**{plug['displayProperties']['name']}**__ --- {plug['itemTypeDisplayName']}",
+                    value=f"*{plug['flavorText']}*",
+                    inline=False
+                )
+            
+        embed.set_footer(text=f"Page {page + 1} of {math.ceil(len(plug_list) / PLUGS_PER_PAGE)}")
+        return embed
+    
+    current_page = 0
+    message = await ctx.send(embed=create_embed(current_page))
+    num_pages = math.ceil(len(plug_list) / PLUGS_PER_PAGE)
+    for i in range(num_pages):
+        await message.add_reaction(f'{i+1}\u20E3') 
+
+    
+    def check(reaction, user):
+        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in [f'{i+1}\u20E3' for i in range(num_pages)]
+
+    while True:
+        try:
+            reaction, user = await bot.wait_for('reaction_add', timeout=60.0, check=check)
+            current_page = int(reaction.emoji[0]) - 1
+            await message.edit(embed=create_embed(current_page))
+            await message.remove_reaction(reaction, user)
+        except asyncio.TimeoutError:
+            break
+    
 #xur's vendor hash: 2190858386
 @bot.command()
+@commands.cooldown(1, 10, commands.BucketType.user)
 async def whatisxur(ctx):
     if is_within_time_range():
-        # user = DestinyUser(membership_id=4611686018483434245, membership_type=BungieMembershipType.TIGER_STEAM)
-        # character = DestinyCharacter(membership_id=4611686018483434245, membership_type=BungieMembershipType.TIGER_STEAM, character_id=2305843009488814713)
-        #print(dir(character))
-        res = requests.get('https://www.bungie.net/Platform/Destiny2/Vendors/?components=402', headers = headers)
+        await ctx.send("Getting Xûr's inventory...")
         
-        if os.path.isfile(r".\vendors.json") == False:    
-            with open('./vendors.json', 'w') as file:
-                file.write(json.dumps(json.loads(res.text), indent = 4))
+        res = requests.get('https://www.bungie.net/Platform/Destiny2/Vendors/?components=402', headers = publicheaders)
+        await ctx.send(f"Request returned {res.status_code}")
+        
+         
+        with open('./vendors.json', 'w') as file:
+            file.write(json.dumps(json.loads(res.text), indent = 4))
         with open('vendors.json', 'r') as file:
             data = json.load(file)
             
@@ -579,12 +786,7 @@ async def whatisxur(ctx):
         for item_hash in item_hashes:
             item = all_data['DestinyInventoryItemDefinition'][item_hash]
             item_list.append(item)
-        # ghorn = all_data['DestinyInventoryItemDefinition'][hash]
-
-        # for item in item_list:
-        #     print('Name: '+item['displayProperties']['name'])
-        #     print('Type: '+item['itemTypeDisplayName'])
-        #     print('Flavor Text: '+item['flavorText'])
+        
         quote = random.choice(quotes)
         embed = discord.Embed(title="__**Xûr's Wares**__", color=0x964B00)
         embed.add_field(name = "", value=f'*"{quote}"*', inline=False)
@@ -597,8 +799,179 @@ async def whatisxur(ctx):
     else:
         await ctx.send("I am currently unavailable. Please check back during the weekend.")
 
-#Gjallarhorn
 @bot.command()
+@commands.cooldown(1, 10, commands.BucketType.user)
+async def whatiseververse(ctx):
+    await ctx.send("Getting Eververse inventory...")
+    post = requests.post('https://www.bungie.net/Platform/App/Oauth/Token/', headers = tokenheaders, data = f"grant_type=refresh_token&refresh_token={os.getenv('refresh_token')}&client_id={os.getenv('CLIENT_ID')}&client_secret={os.getenv('CLIENT_SECRET')}")
+    with open('./token.json', 'w') as file:
+        file.write(json.dumps(json.loads(post.text), indent = 4))
+    
+    if os.path.isfile(r".\token.json") == False: 
+        # might be stale 
+        post = requests.post('https://www.bungie.net/Platform/App/Oauth/Token/', headers = tokenheaders, data = f"grant_type=authorization_code&code=4e286a86fa54e77fb28f8a4d7b2aa63c&client_id={os.getenv('CLIENT_ID')}&client_secret={os.getenv('CLIENT_SECRET')}")
+        with open('./token.json', 'w') as file:
+            file.write(json.dumps(json.loads(post.text), indent = 4))
+    json_file_path = './token.json'
+    env_file_path = './.env'
+
+    with open(json_file_path, 'r') as file:
+        json_data = json.load(file)
+
+
+    
+    flattened_data = flatten_json(json_data)
+
+    
+    env_data = {}
+    if os.path.isfile(env_file_path):
+        with open(env_file_path, 'r') as env_file:
+            for line in env_file:
+                if line.strip() and not line.startswith('#'):
+                    key, value = line.strip().split('=', 1)
+                    env_data[key] = value
+
+   
+    env_data.update(flattened_data)
+    with open(env_file_path, 'w') as env_file:
+        for key, value in env_data.items():
+            env_file.write(f"{key}={value}\n")
+    
+    
+    os.environ.update({key: str(value) for key, value in flattened_data.items()})
+    headers.update({'Authorization': f"Bearer {os.getenv('access_token')}"})
+    
+
+    print("Data written to .env file successfully.")
+
+    res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009488814713/Vendors/3361454721/?components=402', headers = headers)
+    hunter_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009404487278/Vendors/3361454721/?components=402', headers = headers)
+    titan_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009489745017/Vendors/3361454721/?components=402', headers = headers)
+    await ctx.send(f"Request returned {res.status_code}")
+    count = 0
+    item_hashes = []
+    bright_dust_costs = []
+    with open('./eververse.json', 'w') as file:
+        file.write(json.dumps(json.loads(res.text), indent = 4))
+    with open('./eververse.json', 'r') as file:
+        data = json.load(file)
+    with open('./eververse_hunter.json', 'w') as file:
+        file.write(json.dumps(json.loads(hunter_res.text), indent = 4))
+    with open('./eververse_hunter.json', 'r') as file:
+        hunter_data = json.load(file)
+    with open('./eververse_titan.json', 'w') as file:
+        file.write(json.dumps(json.loads(titan_res.text), indent = 4))
+    with open('./eververse_titan.json', 'r') as file:
+        titan_data = json.load(file)
+    bright_dust_sales = data.get('Response', {}).get('sales', {}).get('data', {})
+    bright_dust_sales_hunter = hunter_data.get('Response', {}).get('sales', {}).get('data', {})
+    bright_dust_sales_titan = titan_data.get('Response', {}).get('sales', {}).get('data', {})
+    for sale_id, sale_info in bright_dust_sales.items():
+        for costs in sale_info['costs']:
+            if 'itemHash' in costs: 
+                if costs['itemHash'] == 2817410917: # item hash for bright dust
+                    item_hashes.append(sale_info['itemHash'])
+                    bright_dust_costs.append(costs['quantity'])
+    for sale_id, sale_info in bright_dust_sales_hunter.items():
+        for costs in sale_info['costs']:
+            if 'itemHash' in costs: 
+                if costs['itemHash'] == 2817410917: # item hash for bright dust
+                    item_hashes.append(sale_info['itemHash'])
+                    bright_dust_costs.append(costs['quantity'])
+    for sale_id, sale_info in bright_dust_sales_titan.items():
+        for costs in sale_info['costs']:
+            if 'itemHash' in costs: 
+                if costs['itemHash'] == 2817410917: # item hash for bright dust
+                    item_hashes.append(sale_info['itemHash'])
+                    bright_dust_costs.append(costs['quantity'])
+                    
+    
+    if os.path.isfile(r".\manifest.pickle") == False:
+        get_manifest()
+        all_data = build_dict(hashes)
+        with open('manifest.pickle', 'wb') as data:
+            pickle.dump(all_data, data)
+            print("'manifest.pickle' created!\nDONE!")
+    else:
+        print('Pickle Exists')
+
+    with open('manifest.pickle', 'rb') as data:
+        all_data = pickle.load(data)
+    item_list = []
+    bright_dust_costs_filtered = []
+    for item_hash in item_hashes:
+        item = all_data['DestinyInventoryItemDefinition'][item_hash]
+        if item['itemTypeDisplayName'] == "Emote" or item['itemTypeDisplayName'] == "Ship" or item['itemTypeDisplayName'] == "Weapon Ornament" or item['itemTypeDisplayName'] == "Armor Ornament" or item['itemTypeDisplayName'] == "Warlock Ornament" or item['itemTypeDisplayName'] == "Hunter Ornament" or item['itemTypeDisplayName'] == "Titan Ornament":
+            # only append if it is not already in the item_list
+            if item not in item_list:
+                item_list.append(item)
+                bright_dust_costs_filtered.append(bright_dust_costs[count])
+        count += 1
+
+    def create_embed(page):
+        count = 0
+        if page == 0:
+            embed = discord.Embed(title="__**Eververse Items**__", color=0x964B00)
+            for item in item_list:
+                embed.add_field(
+                    name=f"__**{item['displayProperties']['name']}**__ --- {item['itemTypeDisplayName']}",
+                    value=f"*{bright_dust_costs_filtered[count]} Bright Dust*",
+                    inline=False
+                )
+                count += 1
+        else:
+            item = item_list[page-1]
+            embed = discord.Embed(title=f"__**{item['displayProperties']['name']} --- {item['itemTypeDisplayName']}**__ ", color=0x964B00)
+            # probably not useful
+            # icon_url = f"https://www.bungie.net{item['displayProperties']['icon']}"
+            # image_path = f"{item['displayProperties']['name']}.png"
+            if 'screenshot' in item:
+                embed.set_image(url=f"https://www.bungie.net{item['screenshot']}")
+            else:
+                embed.set_thumbnail(url=f"https://www.bungie.net{item['displayProperties']['icon']}")
+                # if item['flavorText'] is not an empty string
+            if item['flavorText'] != "":
+                embed.add_field(
+                    name=f"_{item['flavorText']}_",
+                    value=f"*{bright_dust_costs_filtered[page-1]} Bright Dust*",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name=f"_{item['displayProperties']['description']}_",
+                    value=f"*{bright_dust_costs_filtered[page-1]} Bright Dust*",
+                    inline=False
+                )
+            
+            
+
+
+        embed.set_footer(text=f"Page {page + 1} of {math.ceil(len(item_list))+1}")
+        return embed
+    
+    
+    current_page = 0
+    message = await ctx.send(embed=create_embed(current_page))
+    num_pages = math.ceil(len(item_list)+1)
+    for i in range(num_pages):
+        await message.add_reaction(f'{i+1}\u20E3') 
+
+    
+    def check(reaction, user):
+        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in [f'{i+1}\u20E3' for i in range(num_pages)]
+
+    while True:
+        try:
+            reaction, user = await bot.wait_for('reaction_add', timeout=60.0, check=check)
+            current_page = int(reaction.emoji[0]) - 1
+            await message.edit(embed=create_embed(current_page))
+            await message.remove_reaction(reaction, user)
+        except asyncio.TimeoutError:
+            break        
+        
+    
+@bot.command()
+@commands.cooldown(1, 10, commands.BucketType.user)
 async def whereisminerva(ctx):
     embed = discord.Embed(title="__**Incoming Transmission:**__", color=0x964B00)
     scraper = WebScraper("https://www.whereisminerva.com/")
@@ -608,13 +981,13 @@ async def whereisminerva(ctx):
     embed.add_field(name = "", value=f"Good morning dwellers, and good morning America! Want to figure out how to build anything from a cattle prod to a nuclear reactor? Need to get rid of all that cumbersome gold bullion? Minerva's in town, and she's got you covered. Come pay a visit!", inline=False)
     embed.add_field(name = "", value=f"----------------------------------", inline=False)
     if extracted_data:
+        
         for key, value in extracted_data.items():
-            # bold the value
             key = f"__**{key}**__" if key else "" 
             embed.add_field(name=key, value=value, inline=False)
         embed.add_field(name = "", value=f"*And as always, stay safe America!*", inline=False)
 
-
+    
     embed.add_field(name = "", value=f"----------------------------------", inline=False)
     
 
@@ -625,31 +998,67 @@ async def whereisminerva(ctx):
     await ctx.send(embed=embed)
 
 @bot.command()
+@commands.cooldown(1, 10, commands.BucketType.user)
 async def whatisminerva(ctx):
     embed = discord.Embed(title="__**Minerva's Inventory**__", color=0x964B00)
     scraper = WebScraper("https://www.whereisminerva.com/")
-    #until extracted data is available, send a loading message
     await ctx.send("Incoming transmission...")
     extracted_items = await scraper.fetch_minerva_inventory()
     extracted_costs = await scraper.fetch_minerva_costs()
     combined_data = []
-    embed.set_thumbnail(url="https://images.fallout.wiki/2/24/Atx_playericon_vaultboy_14.webp")
+    
+
+    PLUGS_PER_PAGE = 10
     if extracted_items and extracted_costs:
         for item, cost in zip(extracted_items, extracted_costs):
             combined_data.append({'item':item, 'cost':cost})
+    else:
+        await ctx.send("Failed to fetch data")
+        return
+            
+    def create_embed(page):
+        start = page * PLUGS_PER_PAGE
+        end = start + PLUGS_PER_PAGE 
+        embed = discord.Embed(title="__**Minerva's Inventory**__", color=0x964B00)
+        embed.set_thumbnail(url="https://images.fallout.wiki/2/24/Atx_playericon_vaultboy_14.webp")
         
-        for element in combined_data:
-            # print (f"{element['item']} for {element['cost']} bullion")
-            # element = f"__**{element}**__" if element else "" 
-            embed.add_field(name='', value=f"**{element['item']}** --- **{element['cost']} bullion**", inline=False)
-        # print (value)
-        # bold the value
-        # print (key)
-        # print (value)
-        # value = f"__{value}__" if value else "" 
-        # embed.add_field(name=value, value=, inline=False)
+        for element in combined_data[start:end]:
+            embed.add_field(
+                name=f"**{element['item']}**",
+                value=f"*{element['cost']} bullion*",
+                inline=False
+            )
+            
         embed.add_field(name = "", value=f"*And as always, stay safe America!*", inline=False)
-    await ctx.send(embed=embed)
+            
+            
+
+        
+        embed.set_footer(text=f"Page {page + 1} of {math.ceil(len(combined_data) / PLUGS_PER_PAGE)}")
+        return embed
+
+    current_page = 0
+    num_pages = math.ceil(len(combined_data) / PLUGS_PER_PAGE)
+    message = await ctx.send(embed=create_embed(current_page))
+    for i in range(num_pages):
+        await message.add_reaction(f'{i+1}\u20E3') 
+
+    
+    def check(reaction, user):
+        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in [f'{i+1}\u20E3' for i in range(num_pages)]
+
+    while True:
+        try:
+            reaction, user = await bot.wait_for('reaction_add', timeout=60.0, check=check)
+            current_page = int(reaction.emoji[0]) - 1
+            await message.edit(embed=create_embed(current_page))
+            await message.remove_reaction(reaction, user)
+        except asyncio.TimeoutError:
+            break
+    
+    
+
+
 bot.run(os.getenv('TOKEN'))
 
 

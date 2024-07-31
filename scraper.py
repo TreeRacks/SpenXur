@@ -1,4 +1,5 @@
 import requests
+import os
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -13,19 +14,14 @@ class WebScraper:
     async def fetch_data(self):
         try:
             response = requests.get(self.url)
-            response.raise_for_status()  # Raise an exception for HTTP errors
-
-            # Parse the HTML content
+            response.raise_for_status()  
             soup = BeautifulSoup(response.text, 'html.parser')
-
-            # Initialize a dictionary to store the extracted texts
+            
             extracted_texts = {}
 
-            # Find and extract text from multiple HTML elements
+            
             location = soup.find('h4', class_='title')
            
-            
-            # Add the extracted text to the dictionary
             extracted_texts[''] = location.text if location else None
             exotic1 = soup.find('h4', class_='et_pb_module_header')
             
@@ -44,32 +40,35 @@ class WebScraper:
 
     async def fetch_minerva_data(self):
         try:
-            # instantiate options 
+            
             options = webdriver.ChromeOptions() 
             
-            # run browser in headless mode 
+            # https://stackoverflow.com/questions/78796828/i-got-this-error-oserror-winerror-193-1-is-not-a-valid-win32-application
+            # ------
             options.headless = True 
             options.add_argument("--headless=new")
             
-            # instantiate driver 
-            driver = webdriver.Chrome(service=ChromeService( 
-                ChromeDriverManager().install()), options=options) 
-            
-            # load website 
+            chrome_install = ChromeDriverManager().install()
+
+            folder = os.path.dirname(chrome_install)
+            chromedriver_path = os.path.join(folder, "chromedriver.exe")
+
+            service = ChromeService(chromedriver_path) 
+
+            driver = webdriver.Chrome(service=service, options=options)
+            # ------
             
             url = self.url
-            # get the entire website content 
+            
             driver.get(url) 
             wait = WebDriverWait(driver, 5)
             extracted_texts = {}
-            # select elements by class name 
-            # Wait until the elements with the class name 'location-header' are present
             elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, '.location-header')))
             time = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.text-muted')))
             
            
             for i, element in enumerate(elements):
-                # Extract text within the element
+                
                 text = element.text
                 #remove the last 3 characters
                 text = text[:-3]
@@ -79,40 +78,43 @@ class WebScraper:
             extracted_texts[''] = time.text
             
             return extracted_texts
+
         except requests.RequestException as e:
             print(f"Error fetching data: {e}")
             return None
 
     async def fetch_minerva_inventory(self):
         try:
-            # instantiate options 
-            options = webdriver.ChromeOptions() 
             
-            # run browser in headless mode 
+            options = webdriver.ChromeOptions() 
             options.headless = True 
             options.add_argument("--headless=new")
-            # instantiate driver 
-            driver = webdriver.Chrome(service=ChromeService( 
-                ChromeDriverManager().install()), options=options) 
-            
-            # load website 
-            
+            chrome_install = ChromeDriverManager().install()
+
+            folder = os.path.dirname(chrome_install)
+            chromedriver_path = os.path.join(folder, "chromedriver.exe")
+
+            service = ChromeService(chromedriver_path) 
+
+            driver = webdriver.Chrome(service=service, options=options)
+            # service=ChromeService( 
+            #     ChromeDriverManager().install()), options=options
             url = self.url
-            # get the entire website content 
+            
             driver.get(url) 
             wait = WebDriverWait(driver, 5)
             extracted_texts = []
-            # select elements by class name 
-            # Wait until the elements with the class name 'location-header' are present
+            
             items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, '.itemname')))
             
             for i, item in enumerate(items):
-                # Extract text within the element
+                
                 text = item.text
                 #remove the last 3 characters
                 # print (text)
                 
                 extracted_texts.append(text)
+            
         
                     
             return extracted_texts
@@ -123,30 +125,35 @@ class WebScraper:
     async def fetch_minerva_costs(self):
 
         try:
-            # instantiate options 
+            
             options = webdriver.ChromeOptions() 
             
-            # run browser in headless mode 
+            
             options.headless = True 
             options.add_argument("--headless=new")
-            # instantiate driver 
-            driver = webdriver.Chrome(service=ChromeService( 
-                ChromeDriverManager().install()), options=options) 
             
-            # load website 
+            chrome_install = ChromeDriverManager().install()
+
+            folder = os.path.dirname(chrome_install)
+            chromedriver_path = os.path.join(folder, "chromedriver.exe")
+
+            service = ChromeService(chromedriver_path) 
+
+            driver = webdriver.Chrome(service=service, options=options)
+            
+            
             
             url = self.url
-            # get the entire website content 
+            
             driver.get(url) 
             wait = WebDriverWait(driver, 5)
             extracted_texts = []
             costs = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, '.bullion')))
             
             for i, cost in enumerate(costs):
-                # Extract the full text content of the div
+                
                 full_text = cost.text
                 
-                # Remove the text within the img tag
                 try:
                     img_element = cost.find_element(By.TAG_NAME, 'img')
                     img_text = img_element.get_attribute('outerHTML')
@@ -157,7 +164,7 @@ class WebScraper:
                 #only append if it is not ''
                 if text_without_img != '':
                     extracted_texts.append(text_without_img)
-                
+            
             return extracted_texts
         except requests.RequestException as e:
             print(f"Error fetching data: {e}")
