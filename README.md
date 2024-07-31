@@ -4,6 +4,12 @@
 Spenxûr, much like his brother Xûr, has travelled across dimensions and countless worlds. Unlike his brother however, he chooses to deal in information instead of weapons. 
 With Spenxûr in your Discord server, after running ```python3 main.py``` you can bend his will to your own (or just get him to remind you about that dentist appointment).
 
+Do note that Spenxûr interacts with the Destiny 2 API and thus uses basic OAUTH to receive and send tokens in requests. This requires the existence of a ``.env`` folder in the directory in order for most of the vendor-related commands to work.
+
+Please be aware that the first use of some vendor commands will also take longer as the current Destiny 2 manifest is pulled for the first time and any relevant JSON files are rendered.
+
+# Command List
+
 ### ```--echo```
 You can tell Spenxûr to relay and repeat any message of your choosing in any given Discord channel he has permission to send messages to. 
 
@@ -50,12 +56,22 @@ Returns the current PST time. Currently the only time zone implemented, but will
 ### ```--whereisxur```
 Spenxûr's brother, Xûr, could be hiding anywhere in the solar system with *fantastic loot! You can find out the Destiny 2 NPC's location, wares, and deepest secrets with a single command. If Xûr has departed for the week, this command will instead tell you how long it will be until he returns.
 
-**definitely not*
+**your mileage may vary*
 
 ---
 
 ### ```--whatisxur```
 Gives a brief rundown of Xûr's entire stock. 
+
+---
+
+### ```--whatisbanshee```
+Gives a brief rundown of Banshee-44's entire stock. Complete with traits, rolls, and masterworks.
+
+---
+
+### ```--whatiseververse```
+Gives a brief rundown of relevant Eververse items on sale for Bright Dust, such as any ships, Legendary and Exotic ornaments, and emotes.
 
 ---
 
