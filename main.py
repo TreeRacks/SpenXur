@@ -582,9 +582,6 @@ def flatten_json(json_data, parent_key='', sep='_'):
     return dict(items)
 
 
-
-
-
 @bot.command()
 async def whatisbanshee(ctx):
     await ctx.send("Getting Banshee-44's inventory...")
@@ -645,11 +642,11 @@ async def whatisbanshee(ctx):
 
     for sale_id, sale_info in sales_data.items():
         if 'itemHash' in sale_info:
-            item_hashes.append(sale_info['itemHash'])
+            item_hashes.append(sale_info['itemHash']) # store each item hash
         if sale_id in sockets_data:
             socket_info = sockets_data[sale_id]
-            plug_hashes = [socket['plugHash'] for socket in socket_info["sockets"] if "plugHash" in socket]
-            item_plug_hashes[sale_info['itemHash']] = plug_hashes
+            plug_hashes = [socket['plugHash'] for socket in socket_info["sockets"] if "plugHash" in socket] # store each perk hash
+            item_plug_hashes[sale_info['itemHash']] = plug_hashes # key is itemHash, value is list of plugHashes
             
         
 
@@ -697,10 +694,15 @@ async def whatisbanshee(ctx):
         start = page * PLUGS_PER_PAGE
         end = start + PLUGS_PER_PAGE
 
-        if page == 0:
+        if page == 0: # summary
             embed.add_field(name="", value=f'*"{quote}"*', inline=False)
             for item in item_list:
-                
+                if item['tooltipNotifications'] == "This weapon's Pattern can be extracted.":
+                    embed.add_field(
+                    name=f"__**{item['displayProperties']['name']}**__ --- {item['itemTypeDisplayName']} --- Craftable",
+                    value=f"*{item['flavorText']}*",
+                    inline=False
+                )    
                 embed.add_field(
                     name=f"__**{item['displayProperties']['name']}**__ --- {item['itemTypeDisplayName']}",
                     value=f"*{item['flavorText']}*",
@@ -708,7 +710,7 @@ async def whatisbanshee(ctx):
                 )
 
         else:
-            item_index = (page - 1) // (math.ceil(len(plug_list) / PLUGS_PER_PAGE))
+            item_index = (page - 1) // (math.ceil(len(plug_list) / PLUGS_PER_PAGE)) # page indexing
             item_name = item_list[item_index + page + 2]['displayProperties']['name'] # skip some items since they are not in the vendorSales list
             item_description = item_list[item_index + page + 2]['flavorText'] 
             embed.title = f"__**Banshee-44's Wares**__ - {item_name}"
@@ -768,8 +770,6 @@ async def whatisxur(ctx):
                 if 'itemHash' in item_info:
                     item_hashes.append(item_info['itemHash'])
 
-        
-
         if os.path.isfile(r".\manifest.pickle") == False:
             get_manifest()
             all_data = build_dict(hashes)
@@ -802,8 +802,44 @@ async def whatisxur(ctx):
 @bot.command()
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def whatiseververse(ctx):
+    # functions to save and load times 
+    
+    # check weekly reset state
+    def load_weekly_reset_state():
+        if os.path.isfile('weekly_resetted.json'):
+            with open('weekly_resetted.json', 'r') as file:
+                return json.load(file).get('weekly_resetted', False)
+        return False
+
+    def save_weekly_reset_state(state):
+        with open('weekly_resetted.json', 'w') as file:
+            json.dump({'weekly_resetted': state}, file, indent=4)
+        
+    def load_reset_time():
+        with open("reset_time.json", "r") as file:
+            reset_time = json.load(file)
+            return datetime.datetime.strptime(reset_time, "%Y-%m-%d %H:%M:%S")
+            
+            
+    if os.path.isfile("reset_time.json"):
+        reset_time = load_reset_time()
+        if datetime.datetime.now() >= reset_time:
+            print("Weekly reset has occurred.")
+            weekly_resetted = True
+            save_weekly_reset_state(weekly_resetted)
+            
+        else:
+            print("Weekly reset has not occurred.")
+            weekly_resetted = False
+            save_weekly_reset_state(weekly_resetted)
+        
+              
+    weekly_resetted = load_weekly_reset_state()
+    print(f"weekly_resetted is {weekly_resetted}")
+
     await ctx.send("Getting Eververse inventory...")
     post = requests.post('https://www.bungie.net/Platform/App/Oauth/Token/', headers = tokenheaders, data = f"grant_type=refresh_token&refresh_token={os.getenv('refresh_token')}&client_id={os.getenv('CLIENT_ID')}&client_secret={os.getenv('CLIENT_SECRET')}")
+
     with open('./token.json', 'w') as file:
         file.write(json.dumps(json.loads(post.text), indent = 4))
     
@@ -817,12 +853,7 @@ async def whatiseververse(ctx):
 
     with open(json_file_path, 'r') as file:
         json_data = json.load(file)
-
-
-    
     flattened_data = flatten_json(json_data)
-
-    
     env_data = {}
     if os.path.isfile(env_file_path):
         with open(env_file_path, 'r') as env_file:
@@ -837,35 +868,71 @@ async def whatiseververse(ctx):
         for key, value in env_data.items():
             env_file.write(f"{key}={value}\n")
     
-    
+    # update .env with the new access token
     os.environ.update({key: str(value) for key, value in flattened_data.items()})
     headers.update({'Authorization': f"Bearer {os.getenv('access_token')}"})
     
 
     print("Data written to .env file successfully.")
 
-    res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009488814713/Vendors/3361454721/?components=402', headers = headers)
-    hunter_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009404487278/Vendors/3361454721/?components=402', headers = headers)
-    titan_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009489745017/Vendors/3361454721/?components=402', headers = headers)
-    await ctx.send(f"Request returned {res.status_code}")
+    if not os.path.isfile('./eververse.json') and not os.path.isfile('./eververse_hunter.json') and not os.path.isfile('./eververse_titan.json'): # first time running the command/debugging purposes
+        weekly_resetted = True
+        save_weekly_reset_state(weekly_resetted)
+    if weekly_resetted or not os.path.isfile('./eververse.json'):
+        print("getting warlock data")
+        res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009488814713/Vendors/3361454721/?components=402', headers = headers)
+        with open('./eververse.json', 'w') as file:
+            file.write(json.dumps(json.loads(res.text), indent = 4))
+        await ctx.send(f"Request returned {res.status_code}")            
+
+    if weekly_resetted or not os.path.isfile('./eververse_hunter.json'):
+        print("getting hunter data")
+        hunter_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009404487278/Vendors/3361454721/?components=402', headers = headers)
+        with open('./eververse_hunter.json', 'w') as file:
+            file.write(json.dumps(json.loads(hunter_res.text), indent = 4))
+    if weekly_resetted or not os.path.isfile('./eververse_titan.json'):
+        print("getting titan data")
+        titan_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009489745017/Vendors/3361454721/?components=402', headers = headers)
+        with open('./eververse_titan.json', 'w') as file:
+            file.write(json.dumps(json.loads(titan_res.text), indent = 4))
+
+    
+
+    
+    with open('./eververse.json', 'r') as file:
+        data = json.load(file)
+    with open('./eververse_hunter.json', 'r') as file:
+        hunter_data = json.load(file)
+    with open('./eververse_titan.json', 'r') as file:
+        titan_data = json.load(file)
     count = 0
     item_hashes = []
     bright_dust_costs = []
-    with open('./eververse.json', 'w') as file:
-        file.write(json.dumps(json.loads(res.text), indent = 4))
-    with open('./eververse.json', 'r') as file:
-        data = json.load(file)
-    with open('./eververse_hunter.json', 'w') as file:
-        file.write(json.dumps(json.loads(hunter_res.text), indent = 4))
-    with open('./eververse_hunter.json', 'r') as file:
-        hunter_data = json.load(file)
-    with open('./eververse_titan.json', 'w') as file:
-        file.write(json.dumps(json.loads(titan_res.text), indent = 4))
-    with open('./eververse_titan.json', 'r') as file:
-        titan_data = json.load(file)
+    
     bright_dust_sales = data.get('Response', {}).get('sales', {}).get('data', {})
     bright_dust_sales_hunter = hunter_data.get('Response', {}).get('sales', {}).get('data', {})
     bright_dust_sales_titan = titan_data.get('Response', {}).get('sales', {}).get('data', {})
+        
+    for sale_id, sale_info in bright_dust_sales.items():
+        if 'overrideNextRefreshDate' in sale_info:
+            with open('reset_time.json', 'w') as file:
+                file.write(json.dumps(sale_info['overrideNextRefreshDate'], indent = 4))
+            with open('reset_time.json', 'r') as file:
+                reset_time = json.load(file)
+
+            # formatting the time from reset_time.json
+            reset_time = datetime.datetime.strptime(reset_time, "%Y-%m-%dT%H:%M:%SZ") # convert to datetime object
+            formatted_time = reset_time.strftime("%Y-%m-%d %H:%M:%S") # clean up string
+            print(f"Reset time: {formatted_time}")
+
+            # store formatted time in a file to read
+            with open('reset_time.json', 'w') as file:
+                file.write(json.dumps(formatted_time, indent = 4))
+
+            print(f"Current time: {datetime.datetime.now()}")
+            break
+            
+    # use a hashmap maybe? this forlooping is probably inefficient
     for sale_id, sale_info in bright_dust_sales.items():
         for costs in sale_info['costs']:
             if 'itemHash' in costs: 
@@ -886,7 +953,7 @@ async def whatiseververse(ctx):
                     bright_dust_costs.append(costs['quantity'])
                     
     
-    if os.path.isfile(r".\manifest.pickle") == False:
+    if os.path.isfile(r".\manifest.pickle") == False or weekly_resetted:
         get_manifest()
         all_data = build_dict(hashes)
         with open('manifest.pickle', 'wb') as data:
@@ -899,9 +966,12 @@ async def whatiseververse(ctx):
         all_data = pickle.load(data)
     item_list = []
     bright_dust_costs_filtered = []
+    valid_categories = ["Ship", "Weapon Ornament", "Armor Ornament", 
+    "Warlock Ornament", "Hunter Ornament", "Titan Ornament", 
+    "Warlock Universal Ornament", "Hunter Universal Ornament", "Titan Universal Ornament"]
     for item_hash in item_hashes:
         item = all_data['DestinyInventoryItemDefinition'][item_hash]
-        if item['itemTypeDisplayName'] == "Emote" or item['itemTypeDisplayName'] == "Ship" or item['itemTypeDisplayName'] == "Weapon Ornament" or item['itemTypeDisplayName'] == "Armor Ornament" or item['itemTypeDisplayName'] == "Warlock Ornament" or item['itemTypeDisplayName'] == "Hunter Ornament" or item['itemTypeDisplayName'] == "Titan Ornament":
+        if item['itemTypeDisplayName'] in valid_categories:
             # only append if it is not already in the item_list
             if item not in item_list:
                 item_list.append(item)

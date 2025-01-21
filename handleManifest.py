@@ -7,19 +7,22 @@ def get_manifest():
     r = requests.get(manifest_url)
     manifest = r.json()
     mani_url = 'http://www.bungie.net'+manifest['Response']['mobileWorldContentPaths']['en']
+    print('Manifest URL: '+mani_url)
 
     #Download the file, write it to 'MANZIP'
     r = requests.get(mani_url)
     with open("MANZIP", "wb") as zip:
         zip.write(r.content)
-    print("Download Complete!")
+    print("Manifest download complete!")
 
     #Extract the file contents, and rename the extracted file
     # to 'Manifest.content'
     with zipfile.ZipFile('MANZIP') as zip:
         name = zip.namelist()
         zip.extractall()
-    os.rename(name[0], 'manifest.content')
+    if os.path.isfile(r".\manifest.content") == True:
+        os.remove('manifest.content')
+        os.rename(name[0], 'manifest.content')
     print('Unzipped!')
 
 hashes = {
