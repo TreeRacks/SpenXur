@@ -1,6 +1,7 @@
 import discord
 import asyncio
 import datetime
+import time
 import aiosqlite
 import random
 import os
@@ -844,6 +845,8 @@ async def whatiseververse(ctx):
         file.write(json.dumps(json.loads(post.text), indent = 4))
     
     if os.path.isfile(r".\token.json") == False: 
+        auth_url = f"https://www.bungie.net/en/OAuth/Authorize?client_id={os.getenv('CLIENT_ID')}&response_type=code&state=12345&redirect_uri=https://www.bungie.net/en/OAuth/Callback"
+        await ctx.send(f"Authorize the Bungie API by going to:\n{(auth_url)}")
         # might be stale 
         post = requests.post('https://www.bungie.net/Platform/App/Oauth/Token/', headers = tokenheaders, data = f"grant_type=authorization_code&code=4e286a86fa54e77fb28f8a4d7b2aa63c&client_id={os.getenv('CLIENT_ID')}&client_secret={os.getenv('CLIENT_SECRET')}")
         with open('./token.json', 'w') as file:
