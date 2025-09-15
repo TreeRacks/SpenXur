@@ -4,5 +4,6 @@ uselessPlugs = [
     "Default Ornament",
     "Kill Tracker",
     "Empty Memento Socket",
-    "Empty Weapon Level Boost Socket"   
+    "Empty Weapon Level Boost Socket",
+    "Empty Enhancement Socket", 
 ]

@@ -678,9 +678,7 @@ async def whatisbanshee(ctx):
                     plug = all_data['DestinyInventoryItemDefinition'][plug_hash]
                     if plug['displayProperties']['name'] not in uselessPlugs and plug['itemTypeDisplayName'] != "Origin Trait":
                         plug_list.append(plug)
-                        
-        
-
+                    
    
     with (open('./itemList.json', 'w')) as file:
         file.write(json.dumps(item_list, indent = 4))
@@ -729,17 +727,21 @@ async def whatisbanshee(ctx):
     current_page = 0
     message = await ctx.send(embed=create_embed(current_page))
     num_pages = math.ceil(len(plug_list) / PLUGS_PER_PAGE)
-    for i in range(num_pages):
-        await message.add_reaction(f'{i+1}\u20E3') 
-
     
+    await message.add_reaction('⬅️')  
+    await message.add_reaction('➡️')
+
     def check(reaction, user):
-        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in [f'{i+1}\u20E3' for i in range(num_pages)]
+        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in ['⬅️', '➡️']
 
     while True:
         try:
             reaction, user = await bot.wait_for('reaction_add', timeout=60.0, check=check)
-            current_page = int(reaction.emoji[0]) - 1
+            if reaction.emoji == '➡️' and current_page < num_pages - 1:
+                current_page += 1
+            elif reaction.emoji == '⬅️' and current_page > 0:
+                current_page -= 1
+            
             await message.edit(embed=create_embed(current_page))
             await message.remove_reaction(reaction, user)
         except asyncio.TimeoutError:
@@ -841,6 +843,7 @@ async def whatiseververse(ctx):
     await ctx.send("Getting Eververse inventory...")
     post = requests.post('https://www.bungie.net/Platform/App/Oauth/Token/', headers = tokenheaders, data = f"grant_type=refresh_token&refresh_token={os.getenv('refresh_token')}&client_id={os.getenv('CLIENT_ID')}&client_secret={os.getenv('CLIENT_SECRET')}")
 
+    # should probably check if the token was generated 
     with open('./token.json', 'w') as file:
         file.write(json.dumps(json.loads(post.text), indent = 4))
     
@@ -848,6 +851,10 @@ async def whatiseververse(ctx):
         auth_url = f"https://www.bungie.net/en/OAuth/Authorize?client_id={os.getenv('CLIENT_ID')}&response_type=code&state=12345&redirect_uri=https://www.bungie.net/en/OAuth/Callback"
         await ctx.send(f"Authorize the Bungie API by going to:\n{(auth_url)}")
         # might be stale 
+        await ctx.send("Token not found or authorization expired.")
+        auth_url = f"https://www.bungie.net/en/OAuth/Authorize?client_id={os.getenv('CLIENT_ID')}&response_type=code&state=12345&redirect_uri=https://www.bungie.net/en/OAuth/Callback"
+        time.sleep(1)
+        await ctx.send(f"Authorize the Bungie API by going to: ```{auth_url}```")
         post = requests.post('https://www.bungie.net/Platform/App/Oauth/Token/', headers = tokenheaders, data = f"grant_type=authorization_code&code=4e286a86fa54e77fb28f8a4d7b2aa63c&client_id={os.getenv('CLIENT_ID')}&client_secret={os.getenv('CLIENT_SECRET')}")
         with open('./token.json', 'w') as file:
             file.write(json.dumps(json.loads(post.text), indent = 4))
@@ -1025,18 +1032,20 @@ async def whatiseververse(ctx):
     
     current_page = 0
     message = await ctx.send(embed=create_embed(current_page))
-    num_pages = math.ceil(len(item_list)+1)
-    for i in range(num_pages):
-        await message.add_reaction(f'{i+1}\u20E3') 
+    num_pages = math.ceil(len(item_list) / 1) # 1 item per page
+    await message.add_reaction('⬅️')  
+    await message.add_reaction('➡️')
 
-    
     def check(reaction, user):
-        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in [f'{i+1}\u20E3' for i in range(num_pages)]
+        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in ['⬅️', '➡️']
 
     while True:
         try:
             reaction, user = await bot.wait_for('reaction_add', timeout=60.0, check=check)
-            current_page = int(reaction.emoji[0]) - 1
+            if reaction.emoji == '➡️' and current_page < num_pages:
+                current_page += 1
+            elif reaction.emoji == '⬅️' and current_page > 0:
+                current_page -= 1
             await message.edit(embed=create_embed(current_page))
             await message.remove_reaction(reaction, user)
         except asyncio.TimeoutError:
