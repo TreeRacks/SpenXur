@@ -733,6 +733,7 @@ async def whatisbanshee(ctx):
 
     def check(reaction, user):
         return user == ctx.author and reaction.message.id == message.id and reaction.emoji in ['⬅️', '➡️']
+        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in ['⬅️', '➡️']
 
     while True:
         try:
@@ -802,45 +803,61 @@ async def whatisxur(ctx):
     else:
         await ctx.send("I am currently unavailable. Please check back during the weekend.")
 
-@bot.command()
-@commands.cooldown(1, 10, commands.BucketType.user)
-async def whatiseververse(ctx):
-    # functions to save and load times 
-    
-    # check weekly reset state
-    def load_weekly_reset_state():
+def grab_character_data(ctx):
+    weekly_resetted = load_weekly_reset_state()
+    if weekly_resetted or not os.path.isfile('./eververse.json'):
+        print("getting warlock data")
+        res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009488814713/Vendors/3361454721/?components=402', headers = headers)
+        with open('./eververse.json', 'w') as file:
+            file.write(json.dumps(json.loads(res.text), indent = 4))     
+    if weekly_resetted or not os.path.isfile('./eververse_hunter.json'):
+        print("getting hunter data")
+        hunter_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009404487278/Vendors/3361454721/?components=402', headers = headers)
+        with open('./eververse_hunter.json', 'w') as file:
+            file.write(json.dumps(json.loads(hunter_res.text), indent = 4))
+    if weekly_resetted or not os.path.isfile('./eververse_titan.json'):
+        print("getting titan data")
+        titan_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009489745017/Vendors/3361454721/?components=402', headers = headers)
+        with open('./eververse_titan.json', 'w') as file:
+            file.write(json.dumps(json.loads(titan_res.text), indent = 4))
+
+# accessor function for weekly reset state (could use a global variable here instead?)
+def load_weekly_reset_state():
         if os.path.isfile('weekly_resetted.json'):
             with open('weekly_resetted.json', 'r') as file:
                 return json.load(file).get('weekly_resetted', False)
         return False
 
-    def save_weekly_reset_state(state):
+# mutator function for weekly reset state
+def save_weekly_reset_state(state):
         with open('weekly_resetted.json', 'w') as file:
             json.dump({'weekly_resetted': state}, file, indent=4)
-        
-    def load_reset_time():
+
+# accessor function for reset time (we could also probably store this in the weekly_resetted.json file)
+def load_reset_time():
         with open("reset_time.json", "r") as file:
             reset_time = json.load(file)
             return datetime.datetime.strptime(reset_time, "%Y-%m-%d %H:%M:%S")
-            
-            
+
+async def check_weekly_reset(ctx):
+    weekly_resetted = load_weekly_reset_state()
     if os.path.isfile("reset_time.json"):
         reset_time = load_reset_time()
         if datetime.datetime.now() >= reset_time:
+            await ctx.send("Weekly reset has occurred since the last time this command was invoked. Updating...")
             print("Weekly reset has occurred.")
             weekly_resetted = True
-            save_weekly_reset_state(weekly_resetted)
-            
         else:
             print("Weekly reset has not occurred.")
             weekly_resetted = False
-            save_weekly_reset_state(weekly_resetted)
-        
-              
-    weekly_resetted = load_weekly_reset_state()
-    print(f"weekly_resetted is {weekly_resetted}")
+        save_weekly_reset_state(weekly_resetted)
 
-    await ctx.send("Getting Eververse inventory...")
+@bot.command()
+@commands.cooldown(1, 10, commands.BucketType.user)
+async def whatiseververse(ctx):
+
+    await check_weekly_reset(ctx) # get the weekly reset state first
+
     post = requests.post('https://www.bungie.net/Platform/App/Oauth/Token/', headers = tokenheaders, data = f"grant_type=refresh_token&refresh_token={os.getenv('refresh_token')}&client_id={os.getenv('CLIENT_ID')}&client_secret={os.getenv('CLIENT_SECRET')}")
 
     # should probably check if the token was generated 
@@ -851,6 +868,10 @@ async def whatiseververse(ctx):
         auth_url = f"https://www.bungie.net/en/OAuth/Authorize?client_id={os.getenv('CLIENT_ID')}&response_type=code&state=12345&redirect_uri=https://www.bungie.net/en/OAuth/Callback"
         await ctx.send(f"Authorize the Bungie API by going to:\n{(auth_url)}")
         # might be stale 
+        await ctx.send("Token not found or authorization expired.")
+        auth_url = f"https://www.bungie.net/en/OAuth/Authorize?client_id={os.getenv('CLIENT_ID')}&response_type=code&state=12345&redirect_uri=https://www.bungie.net/en/OAuth/Callback"
+        time.sleep(1)
+        await ctx.send(f"Authorize the Bungie API by going to: ```{auth_url}```")
         await ctx.send("Token not found or authorization expired.")
         auth_url = f"https://www.bungie.net/en/OAuth/Authorize?client_id={os.getenv('CLIENT_ID')}&response_type=code&state=12345&redirect_uri=https://www.bungie.net/en/OAuth/Callback"
         time.sleep(1)
@@ -888,26 +909,8 @@ async def whatiseververse(ctx):
     if not os.path.isfile('./eververse.json') and not os.path.isfile('./eververse_hunter.json') and not os.path.isfile('./eververse_titan.json'): # first time running the command/debugging purposes
         weekly_resetted = True
         save_weekly_reset_state(weekly_resetted)
-    if weekly_resetted or not os.path.isfile('./eververse.json'):
-        print("getting warlock data")
-        res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009488814713/Vendors/3361454721/?components=402', headers = headers)
-        with open('./eververse.json', 'w') as file:
-            file.write(json.dumps(json.loads(res.text), indent = 4))
-        await ctx.send(f"Request returned {res.status_code}")            
-
-    if weekly_resetted or not os.path.isfile('./eververse_hunter.json'):
-        print("getting hunter data")
-        hunter_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009404487278/Vendors/3361454721/?components=402', headers = headers)
-        with open('./eververse_hunter.json', 'w') as file:
-            file.write(json.dumps(json.loads(hunter_res.text), indent = 4))
-    if weekly_resetted or not os.path.isfile('./eververse_titan.json'):
-        print("getting titan data")
-        titan_res = requests.get('https://www.bungie.net/Platform/Destiny2/3/Profile/4611686018483434245/Character/2305843009489745017/Vendors/3361454721/?components=402', headers = headers)
-        with open('./eververse_titan.json', 'w') as file:
-            file.write(json.dumps(json.loads(titan_res.text), indent = 4))
-
     
-
+    grab_character_data(ctx)
     
     with open('./eververse.json', 'r') as file:
         data = json.load(file)
@@ -915,6 +918,8 @@ async def whatiseververse(ctx):
         hunter_data = json.load(file)
     with open('./eververse_titan.json', 'r') as file:
         titan_data = json.load(file)
+
+    await ctx.send("Loading item hashes...")
     count = 0
     item_hashes = []
     bright_dust_costs = []
@@ -962,8 +967,8 @@ async def whatiseververse(ctx):
                     item_hashes.append(sale_info['itemHash'])
                     bright_dust_costs.append(costs['quantity'])
                     
-    
-    if os.path.isfile(r".\manifest.pickle") == False or weekly_resetted:
+    weekly_resetted = load_weekly_reset_state() # check the weekly reset state 
+    if os.path.isfile(r".\manifest.pickle") == False or weekly_resetted: # rebuild the pickle if weekly reset has occurred, just in case
         get_manifest()
         all_data = build_dict(hashes)
         with open('manifest.pickle', 'wb') as data:
@@ -974,6 +979,9 @@ async def whatiseververse(ctx):
 
     with open('manifest.pickle', 'rb') as data:
         all_data = pickle.load(data)
+
+    await ctx.send("Loading manifest...")
+    
     item_list = []
     bright_dust_costs_filtered = []
     valid_categories = ["Ship", "Weapon Ornament", "Armor Ornament", 
@@ -1038,10 +1046,15 @@ async def whatiseververse(ctx):
 
     def check(reaction, user):
         return user == ctx.author and reaction.message.id == message.id and reaction.emoji in ['⬅️', '➡️']
+        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in ['⬅️', '➡️']
 
     while True:
         try:
             reaction, user = await bot.wait_for('reaction_add', timeout=60.0, check=check)
+            if reaction.emoji == '➡️' and current_page < num_pages:
+                current_page += 1
+            elif reaction.emoji == '⬅️' and current_page > 0:
+                current_page -= 1
             if reaction.emoji == '➡️' and current_page < num_pages:
                 current_page += 1
             elif reaction.emoji == '⬅️' and current_page > 0:
