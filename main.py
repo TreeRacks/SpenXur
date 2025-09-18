@@ -1046,15 +1046,9 @@ async def whatiseververse(ctx):
 
     def check(reaction, user):
         return user == ctx.author and reaction.message.id == message.id and reaction.emoji in ['⬅️', '➡️']
-        return user == ctx.author and reaction.message.id == message.id and reaction.emoji in ['⬅️', '➡️']
-
     while True:
         try:
             reaction, user = await bot.wait_for('reaction_add', timeout=60.0, check=check)
-            if reaction.emoji == '➡️' and current_page < num_pages:
-                current_page += 1
-            elif reaction.emoji == '⬅️' and current_page > 0:
-                current_page -= 1
             if reaction.emoji == '➡️' and current_page < num_pages:
                 current_page += 1
             elif reaction.emoji == '⬅️' and current_page > 0:
